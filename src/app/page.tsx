@@ -3,6 +3,11 @@
 import { useState } from 'react'
 import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth'
+import CameraCapture from "./components/CameraCapture";
+
+
+
+
 
 // 🔹 Firebase 설정 (시우님 프로젝트)
 const firebaseConfig = {
@@ -180,8 +185,11 @@ export default function Home() {
           </div>
         </div>
       </section>
+{/* AI 분리수거 렌즈 */}
+<CameraCapture />
 
       {/* Footer */}
+      
       <footer className="max-w-6xl mx-auto px-6 py-12 text-sm text-gray-600">
         <div className="flex flex-col md:flex-row items-center justify-between">
           <div>© {new Date().getFullYear()} CARBONEX. All rights reserved.</div>
