@@ -1,16 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { initializeApp } from 'firebase/app';
+import { useUserStats } from './hooks/useUserStats';
+import NicknameModal from './components/NicknameModal';
+
+// ✅ 브라우저에서만 로드 (SSR 비활성화)
+const CameraCapture = dynamic(() => import('./components/CameraCapture'), { ssr: false });
+const ReceiptOCRPanel = dynamic(() => import('./components/ReceiptOCRPanel'), { ssr: false });
+const StatsPage = dynamic(() => import('./components/StatsPage'), { ssr: false });
+const HomePage = dynamic(() => import('./components/HomePage'), { ssr: false });
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 
-// ✅ CameraCapture는 브라우저에서만 로드 (SSR 비활성)
-const CameraCapture = dynamic(() => import('./components/CameraCapture'), {
-  ssr: false,
-});
+// NOTE: 페이지는 이미 `use client`이므로 클라이언트 컴포넌트를 직접 import 합니다.
 
-// 🔹 Firebase 설정
+// 🔹 Firebase 설정 (현재 구조 유지)
 const firebaseConfig = {
   apiKey: 'AIzaSyArYCKEK05hjmiwvqbMq5JuEGG1aiMFRdY',
   authDomain: 'ste-final.firebaseapp.com',
@@ -20,14 +25,39 @@ const firebaseConfig = {
   appId: '1:940484009989:web:85d243d96fbbc31522fc6c',
   measurementId: 'G-G4057KG25N',
 };
-
-// 🔹 Firebase 초기화
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
 export default function Home() {
   const [user, setUser] = useState<any>(null);
+  const [mainTab, setMainTab] = useState<'home' | 'chat' | 'camera' | 'chart' | 'profile'>('home'); // ← 메인 탭 상태
+  const [cameraTab, setCameraTab] = useState<'solution' | 'report'>('solution'); // ← 카메라 내부 탭
+  const [topCardMessage, setTopCardMessage] = useState<string>(''); // ← 상단 카드 메시지
+  const [showNicknameModal, setShowNicknameModal] = useState(false);
+  
+  // 카메라 촬영 기능을 위한 ref
+  const cameraCaptureRef = useRef<{ takePhoto: () => void } | null>(null);
+  const receiptOCRPanelRef = useRef<{ takeAndRecognize: () => void } | null>(null);
+
+  // User stats hook
+  const {
+    nickname,
+    totalCarbonSaved,
+    totalEcoPurchases,
+    totalRecycleActions,
+    setNickname,
+    addCarbonSaved,
+    addEcoPurchase,
+    addRecycleAction,
+  } = useUserStats();
+
+  // Check nickname on mount
+  useEffect(() => {
+    if (!nickname) {
+      setShowNicknameModal(true);
+    }
+  }, [nickname]);
 
   const handleLogin = async () => {
     try {
@@ -44,201 +74,288 @@ export default function Home() {
     setUser(null);
   };
 
+  // 현재 날짜 문자열 (예: 11월 29일 (토))
+  const today = new Date();
+  const month = today.getMonth() + 1;
+  const date = today.getDate();
+  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+  const dayOfWeek = dayNames[today.getDay()];
+  const todayString = `${month}월 ${date}일 (${dayOfWeek})`;
+
   return (
-    <main className="min-h-screen bg-gradient-to-b from-pink-50 to-green-50">
-      {/* Header */}
-      <header className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="text-2xl font-extrabold text-emerald-700">CARBONEX</div>
-          <nav className="hidden md:flex gap-6 text-sm text-gray-600">
-            <a className="hover:text-emerald-700" href="#">About</a>
-            <a className="hover:text-emerald-700" href="#">Services</a>
-            <a className="hover:text-emerald-700" href="#">Projects</a>
-            <a className="hover:text-emerald-700" href="#">Impact</a>
-          </nav>
-        </div>
+    <main className="min-h-screen bg-white pb-24">
+      {/* Nickname Modal */}
+      <NicknameModal
+        isOpen={showNicknameModal}
+        onSubmit={(name) => {
+          setNickname(name);
+          setShowNicknameModal(false);
+        }}
+        currentNickname={nickname}
+      />
 
-        <div className="flex items-center gap-4">
-          {!user ? (
-            <button
-              onClick={handleLogin}
-              className="bg-emerald-600 text-white px-4 py-2 rounded-full text-sm shadow"
-            >
-              Google 로그인
+      {/* === 메인 컨텐츠 === */}
+      {mainTab === 'home' && (
+        <HomePage nickname={nickname} />
+      )}
+
+      {mainTab === 'chat' && (
+        <div className="min-h-screen bg-white pb-24">
+          <div className="max-w-sm mx-auto px-4 pt-6">
+            <p className="text-gray-600">채팅 화면</p>
+          </div>
+        </div>
+      )}
+
+      {mainTab === 'camera' && (
+        <section id="lens" className="max-w-6xl mx-auto px-6 mt-12">
+          {/* 탭 컨텐츠 (동시에 렌더하지 않음 → 카메라 충돌 방지) */}
+          <div className="max-w-2xl mx-auto">
+            {/* 상단 헤더 */}
+            <div className="mb-0">
+              <div className="px-6 py-1 flex items-center justify-between rounded-t-2xl" style={{backgroundColor: 'white', borderBottom: '1px solid #CCCCCC'}}>
+                <div className="flex-none">
+                  <img 
+                    src="/images/logo.png" 
+                    alt="Logo"
+                    style={{width: '120px', height: 'auto', marginLeft: '4px', marginTop: '2px'}}
+                  />
+                </div>
+                <button style={{color: '#999999'}}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+                  </svg>
+                </button>
+              </div>
+              <div className="bg-white/95 backdrop-blur-md px-4 py-5 shadow-lg border border-gray-200 border-t-0 border-b-0">
+                
+                {/* 메시지 영역 */}
+                <div>
+                  {topCardMessage ? (
+                    (() => {
+                      const splitIdx = topCardMessage.indexOf('탄소');
+                      if (splitIdx !== -1) {
+                        const line1 = topCardMessage.slice(0, splitIdx).trim();
+                        const line2 = topCardMessage.slice(splitIdx).trim();
+                        return (
+                          <div className="leading-snug">
+                            <p className="text-base font-extrabold text-gray-900 tracking-tight">{line1}</p>
+                            <p className="text-base font-extrabold mt-0.5 tracking-tight" style={{ color: '#00A851' }}>{line2}</p>
+                            <div className="text-xs text-gray-400 mt-2">{todayString}</div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="text-base font-extrabold" style={{ color: '#00A851' }}>{topCardMessage}</div>
+                      );
+                    })()
+                  ) : (
+                    <div className="text-sm text-gray-400">AI 그린렌즈로 환경을 지켜보세요</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {cameraTab === 'solution' ? (
+              <CameraCapture 
+                ref={cameraCaptureRef}
+                tab={cameraTab} 
+                setTab={setCameraTab} 
+                setTopCardMessage={setTopCardMessage}
+                onRecycleAction={addRecycleAction}
+                onCarbonSaved={addCarbonSaved}
+              />
+            ) : (
+              <ReceiptOCRPanel 
+                ref={receiptOCRPanelRef}
+                tab={cameraTab} 
+                setTab={setCameraTab} 
+                setTopCardMessage={setTopCardMessage}
+                onEcoPurchase={addEcoPurchase}
+              />
+            )}
+          </div>
+        </section>
+      )}
+
+      {mainTab === 'chart' && (
+        <div className="min-h-screen bg-[#F7F9FB] pb-24">
+          {/* Header */}
+          <div className="px-6 py-1 flex items-center justify-between" style={{backgroundColor: 'white', borderBottom: '1px solid #CCCCCC'}}>
+            <div className="flex-none">
+              <img 
+                src="/images/logo.png" 
+                alt="Logo"
+                style={{width: '120px', height: 'auto', marginLeft: '4px', marginTop: '2px'}}
+              />
+            </div>
+            <button style={{color: '#999999'}}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+              </svg>
             </button>
-          ) : (
-            <div className="flex items-center gap-3">
-              <img
-                src={user?.photoURL || ''}
-                alt="profile"
-                className="w-9 h-9 rounded-full border"
-              />
-              <span className="text-sm text-gray-700 hidden sm:inline">
-                {user?.displayName || 'User'}
-              </span>
-              <button
-                onClick={handleLogout}
-                className="bg-gray-100 px-3 py-1 rounded-full text-sm hover:bg-gray-200"
-              >
-                로그아웃
-              </button>
-            </div>
-          )}
-          <a
-            className="ml-2 inline-block bg-white px-4 py-2 rounded-full text-sm shadow hover:shadow-md"
-            href="#"
-          >
-            Contact
-          </a>
-        </div>
-      </header>
-
-      {/* Hero */}
-      <section className="max-w-6xl mx-auto px-6">
-        <div className="relative bg-white rounded-3xl overflow-hidden shadow-xl">
-          {/* Curved top SVG */}
-          <div className="absolute left-0 right-0 -top-36 pointer-events-none">
-            <svg viewBox="0 0 1200 300" className="w-full h-72">
-              <defs>
-                <linearGradient id="g1" x1="0" x2="1">
-                  <stop offset="0" stopColor="#FDE68A" />
-                  <stop offset="1" stopColor="#86efac" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M0,200 C200,120 400,40 600,80 C800,120 1000,200 1200,160 L1200,0 L0,0 Z"
-                fill="url(#g1)"
-                opacity="0.95"
-              />
-            </svg>
           </div>
+          <div className="max-w-sm mx-auto px-4 pt-6 space-y-4">
+            <p className="text-base font-semibold mt-2">안녕하세요, {nickname || '사용자'}님!</p>
+            <p className="text-xs text-gray-500 -mt-2">이번 주 나의 환경 챌린지 현황이에요.</p>
 
-          <div className="grid md:grid-cols-2 gap-8 items-center px-8 py-20 relative z-10">
-            {/* Left content */}
-            <div className="pt-16 md:pt-0">
-              <h2 className="text-sm uppercase tracking-widest text-emerald-700">WE ARE</h2>
-              <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 leading-tight mt-3">
-                Solving global problems
-              </h1>
-              <p className="mt-4 text-gray-600 max-w-xl">
-                Carbonex는 비즈니스와 사회가 자연과 조화를 이루며 지속 가능한 미래를 만들도록 돕습니다.
-                AI 기반 탄소 감축 플랜으로 영향력있는 변화를 시작하세요.
-              </p>
-
-              <div className="mt-8 flex flex-wrap gap-4 items-center">
-                <a
-                  href="#"
-                  className="bg-emerald-600 text-white px-5 py-3 rounded-full shadow hover:bg-emerald-700"
-                >
-                  Schedule a consultation
-                </a>
-                <a href="#" className="text-sm text-gray-700 hover:underline">
-                  Learn more
-                </a>
-              </div>
-
-              {/* Stats */}
-              <div className="mt-8 grid grid-cols-3 gap-4 max-w-xs">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-emerald-700">5.7</div>
-                  <div className="text-xs text-gray-500">CO2 Tons Prevented</div>
+            {/* 3-1) 이번 주 챌린지 진행률 카드 */}
+            <div className="bg-white rounded-3xl shadow-sm px-5 py-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M5 12l4-4M5 12l4 4" stroke="#16a34a" strokeWidth="2" strokeLinecap="round"/></svg>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-emerald-700">68</div>
-                  <div className="text-xs text-gray-500">Products Footprinted</div>
+                <span className="text-sm font-semibold text-gray-800">이번 주 챌린지 진행률</span>
+              </div>
+              {(() => { const weeklyProgress = Math.min(100, Math.round(totalCarbonSaved * 3)); return (
+                <>
+                  <div className="text-3xl font-extrabold text-gray-900">{weeklyProgress}%</div>
+                  <div className="mt-2 relative w-full h-2 bg-gray-100 rounded-full">
+                    <div className="absolute h-2 bg-green-500 rounded-full" style={{ width: `${weeklyProgress}%` }} />
+                  </div>
+                </>
+              ); })()}
+            </div>
+
+            {/* 3-2) 누적 포인트 카드 */}
+            <div className="bg-white rounded-3xl shadow-sm px-5 py-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="#16a34a" strokeWidth="2"/></svg>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-emerald-700">13</div>
-                  <div className="text-xs text-gray-500">Active Projects</div>
+                <span className="text-sm font-semibold text-gray-800">누적 포인트</span>
+              </div>
+              {(() => { const points = Math.round(totalEcoPurchases * 10 + totalRecycleActions * 8 + totalCarbonSaved); return (
+                <div className="text-3xl font-extrabold text-gray-900">{points}P</div>
+              ); })()}
+            </div>
+
+            {/* 3-3) 획득 배지 카드 */}
+            <div className="bg-white rounded-3xl shadow-sm px-5 py-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3l3 5h6l-4.5 3.5 2.5 5-5-3.2-5 3.2 2.5-5L3 8h6l3-5z" stroke="#16a34a" strokeWidth="2" strokeLinejoin="round"/></svg>
                 </div>
+                <span className="text-sm font-semibold text-gray-800">획득한 배지</span>
+              </div>
+              {(() => { const badges = Math.min(20, Math.floor((totalRecycleActions + totalEcoPurchases) / 3)); return (
+                <>
+                  <div className="text-3xl font-extrabold text-gray-900">{badges}개</div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-gray-100 inline-block"/>
+                    <span className="w-6 h-6 rounded-full bg-gray-100 inline-block"/>
+                    <span className="w-6 h-6 rounded-full bg-gray-100 inline-block"/>
+                  </div>
+                </>
+              ); })()}
+            </div>
+
+            {/* 4) 이번 주 개인 챌린지 리스트 */}
+            <div className="space-y-3">
+              {[
+                { id: 1, title: '대중교통 3회 이용하기', desc: '버스/지하철 이용으로 탄소 절감', ratio: 0.67, progressText: '2/3회', status: '진행 중' },
+                { id: 2, title: '텀블러 2회 사용하기', desc: '일회용 컵 대신 재사용 컵', ratio: 1.0, progressText: '완료', status: '완료' },
+                { id: 3, title: '분리배출 3회 실천하기', desc: '올바른 재활용 분류', ratio: 0.4, progressText: 'D-2', status: '예정' },
+              ].map(c => (
+                <div key={c.id} className="bg-white rounded-3xl shadow-sm px-5 py-4 space-y-2">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12h16" stroke="#16a34a" strokeWidth="2" strokeLinecap="round"/><path d="M4 12l3.5-3.5M4 12l3.5 3.5" stroke="#16a34a" strokeWidth="2" strokeLinecap="round"/></svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">{c.title}</p>
+                        <p className="text-xs text-gray-400">{c.desc}</p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-1 text-xs rounded-full border border-green-400 text-green-500">{c.status}</span>
+                  </div>
+                  <div className="relative w-full h-2 bg-gray-100 rounded-full">
+                    <div className="absolute h-2 bg-green-500 rounded-full" style={{ width: `${Math.round(c.ratio * 100)}%` }} />
+                  </div>
+                  <p className="text-right text-xs text-gray-500">{c.progressText}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* 5) 오늘의 환경 팁 카드 */}
+            <div className="bg-white rounded-3xl shadow-sm p-4">
+              <div className="bg-gradient-to-r from-[#00C851] to-[#00E676] rounded-2xl px-4 py-3 text-white text-sm flex gap-2 items-start">
+                <span>💡</span>
+                <p>카메라로 재활용품을 스캔하면 올바른 분리배출 방법을 알려드려요!</p>
               </div>
             </div>
 
-            {/* Right illustration */}
-            <div className="flex items-center justify-center">
-              <div className="w-full max-w-md">
-                <svg viewBox="0 0 600 420" className="w-full">
-                  <defs>
-                    <linearGradient id="g-sky" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0" stopColor="#fde68a" />
-                      <stop offset="1" stopColor="#d1fae5" />
-                    </linearGradient>
-                    <linearGradient id="g-hill" x1="0" x2="1">
-                      <stop offset="0" stopColor="#a7f3d0" />
-                      <stop offset="1" stopColor="#4ade80" />
-                    </linearGradient>
-                  </defs>
-
-                  <rect x="0" y="0" width="600" height="420" fill="url(#g-sky)" rx="24" />
-                  <g transform="translate(0,60)">
-                    <path
-                      d="M0 220 C100 140 200 120 300 160 C400 200 500 160 600 180 L600 260 L0 260 Z"
-                      fill="url(#g-hill)"
-                    />
-                    <path
-                      d="M0 240 C140 180 220 200 360 220 C460 230 540 200 600 220 L600 300 L0 300 Z"
-                      fill="#10b981"
-                      opacity="0.85"
-                    />
-                  </g>
-
-                  <g transform="translate(70,200) scale(0.9)">
-                    <rect x="360" y="70" width="40" height="90" fill="#334155" />
-                    <rect x="320" y="90" width="30" height="70" fill="#475569" />
-                    <rect x="280" y="110" width="40" height="50" fill="#334155" />
-                    <rect x="240" y="130" width="60" height="30" fill="#475569" />
-                    <rect x="200" y="140" width="40" height="20" fill="#334155" />
-                    <rect x="360" y="40" width="18" height="40" fill="#111827" />
-                    <path d="M360 40 C350 20 370 20 360 0" fill="#9ca3af" opacity="0.9" />
-                    <g opacity="0.18" fill="#111827">
-                      <ellipse cx="388" cy="22" rx="18" ry="6" />
-                      <ellipse cx="404" cy="6" rx="22" ry="8" />
-                    </g>
-                  </g>
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom white card area */}
-          <div className="border-t border-gray-100 px-8 py-6 bg-white">
-            <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="text-sm text-gray-600">Join our community building sustainable futures.</div>
-              <div className="flex gap-3">
-                <a className="text-sm text-emerald-700 font-semibold" href="#">
-                  Schedule
-                </a>
-                <a className="text-sm text-gray-500" href="#">
-                  Impact Projects
-                </a>
-              </div>
-            </div>
           </div>
         </div>
-      </section>
+      )}
 
-      {/* AI 분리수거 렌즈 섹션 */}
-      <section id="lens" className="max-w-6xl mx-auto px-6 mt-12">
-        <h2 className="text-xl font-bold text-slate-900">AI 분리수거 렌즈</h2>
-        <p className="text-sm text-gray-600 mt-1">
-          iOS는 Safari에서만 카메라 접근이 됩니다. (첫 실행 시 카메라 허용 필요)
-        </p>
-        <div className="mt-4">
-          <CameraCapture />
-        </div>
-      </section>
+      {mainTab === 'profile' && (
+        <StatsPage />
+      )}
 
-      {/* Footer */}
-      <footer className="max-w-6xl mx-auto px-6 py-12 text-sm text-gray-600">
-        <div className="flex flex-col md:flex-row items-center justify-between">
-          <div>© {new Date().getFullYear()} CARBONEX. All rights reserved.</div>
-          <div className="flex gap-4 mt-4 md:mt-0">
-            <a className="hover:underline" href="#">Privacy</a>
-            <a className="hover:underline" href="#">Terms</a>
-            <a className="hover:underline" href="#">Contact</a>
+      {/* 하단 네비게이션 바 */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
+        <div className="max-w-2xl mx-auto px-6 py-3">
+          <div className="flex items-center justify-around">
+            {/* 홈 */}
+            <button
+              onClick={() => setMainTab('home')}
+              className={`flex flex-col items-center gap-1 ${mainTab === 'home' ? 'text-emerald-600' : 'text-gray-400'}`}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" fill="currentColor"/>
+              </svg>
+            </button>
+
+            {/* AI 그린렌즈 (중앙, 크게) */}
+            <button
+              onClick={() => {
+                if (mainTab === 'camera') {
+                  // 이미 카메라 탭에 있으면 사진 촬영 또는 OCR 실행
+                  if (cameraTab === 'solution' && cameraCaptureRef.current) {
+                    cameraCaptureRef.current.takePhoto();
+                  } else if (cameraTab === 'report' && receiptOCRPanelRef.current) {
+                    receiptOCRPanelRef.current.takeAndRecognize();
+                  }
+                } else {
+                  // 다른 탭에 있으면 카메라 탭으로 전환
+                  setMainTab('camera');
+                }
+              }}
+              className={`w-14 h-14 rounded-full flex items-center justify-center -mt-6 shadow-xl ${
+                mainTab === 'camera' ? 'bg-emerald-600' : 'bg-gray-900'
+              }`}
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="7" width="16" height="12" rx="2" stroke="#84FF00" strokeWidth="2" fill="none"/>
+                <circle cx="12" cy="13" r="3" stroke="#84FF00" strokeWidth="2" fill="none"/>
+                <circle cx="12" cy="13" r="1.2" fill="#84FF00"/>
+              </svg>
+            </button>
+
+            {/* 차트 */}
+            <button
+              onClick={() => setMainTab('chart')}
+              className={`flex flex-col items-center gap-1 ${mainTab === 'chart' ? 'text-emerald-600' : 'text-gray-400'}`}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z" fill="currentColor"/>
+              </svg>
+            </button>
+
+            {/* 프로필 */}
+            <button
+              onClick={() => setMainTab('profile')}
+              className={`flex flex-col items-center gap-1 ${mainTab === 'profile' ? 'text-emerald-600' : 'text-gray-400'}`}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/>
+              </svg>
+            </button>
           </div>
         </div>
-      </footer>
+      </nav>
     </main>
   );
 }
