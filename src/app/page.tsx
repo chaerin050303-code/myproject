@@ -225,7 +225,7 @@ export default function Home() {
                 </div>
                 <span className="text-sm font-semibold text-gray-800">누적 포인트</span>
               </div>
-              {(() => { const points = Math.round(totalEcoPurchases * 5 + totalRecycleActions * 8 + totalCarbonSaved); return (
+              {(() => { const points = Math.round(totalEcoPurchases * 5); return (
                 <div className="text-3xl font-extrabold text-gray-900">{points}P</div>
               ); })()}
             </div>
