@@ -32,9 +32,20 @@ export default function GreenAILens() {
       {/* content area - pass tab handlers down so children can overlay the tabs on top of camera */}
       <div className="mt-3 bg-transparent">
         {tab === "solution" ? (
-          <CameraCapture tab={tab} setTab={setTab} />
+          <CameraCapture 
+            tab={tab} 
+            setTab={setTab}
+            setTopCardMessage={() => {}}
+            onRecycleAction={() => {}}
+            onCarbonSaved={() => {}}
+          />
         ) : (
-          <ReceiptOCRPanel tab={tab} setTab={setTab} />
+          <ReceiptOCRPanel 
+            tab={tab} 
+            setTab={setTab}
+            setTopCardMessage={() => {}}
+            onEcoPurchase={() => {}}
+          />
         )}
       </div>
 
