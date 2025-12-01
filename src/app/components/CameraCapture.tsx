@@ -32,8 +32,41 @@ const CameraCapture = forwardRef<
   const [modelError, setModelError] = useState<string | null>(null);
   const [liveOverlay, setLiveOverlay] = useState<boolean>(false);
   const liveOverlayTimeoutRef = useRef<number | null>(null);
-  const [showBottleInfo, setShowBottleInfo] = useState<boolean>(false);
-  const bottleDetectionStartRef = useRef<number | null>(null);
+  const [currentGuideKey, setCurrentGuideKey] = useState<string | null>(null);
+  const detectionStartRef = useRef<{ key: string; startTime: number } | null>(null);
+
+  // Recycle guide data for multiple items
+  const recycleGuideMap: Record<string, {
+    title: string;
+    description: string;
+    category: string;
+    carbonSaved: number;
+  }> = {
+    bottle: {
+      title: "페트병 - 생수",
+      description: "내용물을 비우고 라벨을 제거한 뒤, 병을 찌그러뜨려 뚜껑을 닫아 투명 페트병 전용 수거함에 배출하세요.",
+      category: "분리수거",
+      carbonSaved: 0.2
+    },
+    mouse: {
+      title: "마우스 분리수거",
+      description: "마우스를 버릴 때는 폐가전 무상방문수거 서비스를 이용하거나, 단독 배출 시 일반 쓰레기(종량제 봉투)에 넣어 버립니다.",
+      category: "폐가전 / 일반 쓰레기",
+      carbonSaved: 0.1
+    },
+    keyboard: {
+      title: "키보드 분리수거",
+      description: "키보드는 폐가전 무상방문수거 대상으로, 단독 배출 시 일반 쓰레기(종량제 봉투)에 넣어야 합니다.",
+      category: "폐가전 / 일반 쓰레기",
+      carbonSaved: 0.1
+    },
+    toothbrush: {
+      title: "칫솔 분리수거",
+      description: "칫솔은 재활용이 불가능하므로 일반 쓰레기(종량제 봉투)에 버려야 합니다.",
+      category: "일반 쓰레기",
+      carbonSaved: 0.05
+    }
+  };
 
   // takePhoto 함수를 부모 컴포넌트에 노출
   useImperativeHandle(ref, () => ({
@@ -191,29 +224,31 @@ const CameraCapture = forwardRef<
           setDetectedObject(`${labelText} (${(best.score * 100).toFixed(0)}%)`);
           setLiveOverlay(true);
           
-          // Check if bottle detected for 3+ seconds
-          if (best.class === 'bottle') {
-            if (!bottleDetectionStartRef.current) {
-              bottleDetectionStartRef.current = Date.now();
-              console.log('🍾 Bottle detection started!');
+          // Check if item detected for 3+ seconds and has a guide
+          const itemKey = best.class;
+          if (recycleGuideMap[itemKey]) {
+            if (!detectionStartRef.current || detectionStartRef.current.key !== itemKey) {
+              detectionStartRef.current = { key: itemKey, startTime: Date.now() };
+              console.log(`🔍 ${itemKey} detection started!`);
             } else {
-              const elapsed = Date.now() - bottleDetectionStartRef.current;
-              console.log(`🍾 Bottle detected for ${(elapsed/1000).toFixed(1)}s`);
-              if (elapsed >= 3000 && !showBottleInfo) {
-                console.log('✅ Showing bottle info card!');
-                setShowBottleInfo(true);
-                setTopCardMessage('오늘 분리배출을 해서 탄소 0.2kgCO₂를 감축했어요!');
+              const elapsed = Date.now() - detectionStartRef.current.startTime;
+              console.log(`🔍 ${itemKey} detected for ${(elapsed/1000).toFixed(1)}s`);
+              if (elapsed >= 3000 && currentGuideKey !== itemKey) {
+                console.log(`✅ Showing ${itemKey} guide card!`);
+                setCurrentGuideKey(itemKey);
+                const guide = recycleGuideMap[itemKey];
+                setTopCardMessage(`오늘 분리배출을 해서 탄소 ${guide.carbonSaved}kgCO₂를 감축했어요!`);
                 // Update stats
                 if (onRecycleAction) onRecycleAction();
-                if (onCarbonSaved) onCarbonSaved(0.2);
+                if (onCarbonSaved) onCarbonSaved(guide.carbonSaved);
               }
             }
           } else {
-            if (bottleDetectionStartRef.current) {
-              console.log('❌ Bottle detection stopped');
+            if (detectionStartRef.current) {
+              console.log(`❌ ${itemKey} detection stopped (no guide available)`);
             }
-            bottleDetectionStartRef.current = null;
-            setShowBottleInfo(false);
+            detectionStartRef.current = null;
+            setCurrentGuideKey(null);
             setTopCardMessage('');
           }
           
@@ -225,8 +260,8 @@ const CameraCapture = forwardRef<
             setLiveOverlay(false);
           }, 1500);
         } else {
-          bottleDetectionStartRef.current = null;
-          setShowBottleInfo(false);
+          detectionStartRef.current = null;
+          setCurrentGuideKey(null);
         }
       } catch (e: any) {
         console.error('Detection error:', e);
@@ -374,16 +409,16 @@ const CameraCapture = forwardRef<
             className="w-full h-[560px] md:h-[520px] lg:h-[600px] object-cover bg-black"
           />
 
-          {/* Bottle info card - shows when bottle detected for 3+ seconds */}
-          {showBottleInfo && (
+          {/* Universal recycle guide card - shows when any supported item detected for 3+ seconds */}
+          {currentGuideKey && recycleGuideMap[currentGuideKey] && (
             <div className="absolute left-6 right-6 bottom-6 bg-white/98 backdrop-blur-md rounded-3xl p-5 shadow-2xl border border-gray-100 z-50">
               <div className="flex items-start gap-4">
                 <div className="flex-1">
-                  <div className="font-extrabold text-lg text-slate-900">페트병 - 생수</div>
-                  <div className="text-sm text-gray-600 mt-1">내용물을 비우고 라벨을 제거한 뒤, 병을 찌그러뜨려 뚜껑을 닫아 투명 페트병 전용 수거함에 배출하세요.</div>
+                  <div className="font-extrabold text-lg text-slate-900">{recycleGuideMap[currentGuideKey].title}</div>
+                  <div className="text-sm text-gray-600 mt-1">{recycleGuideMap[currentGuideKey].description}</div>
                 </div>
                 <div className="flex-none">
-                  <div className="text-xs text-gray-400">분리수거</div>
+                  <div className="text-xs text-gray-400">{recycleGuideMap[currentGuideKey].category}</div>
                 </div>
               </div>
             </div>

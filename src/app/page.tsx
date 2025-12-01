@@ -225,7 +225,7 @@ export default function Home() {
                 </div>
                 <span className="text-sm font-semibold text-gray-800">누적 포인트</span>
               </div>
-              {(() => { const points = Math.round(totalEcoPurchases * 10 + totalRecycleActions * 8 + totalCarbonSaved); return (
+              {(() => { const points = Math.round(totalEcoPurchases * 5 + totalRecycleActions * 8 + totalCarbonSaved); return (
                 <div className="text-3xl font-extrabold text-gray-900">{points}P</div>
               ); })()}
             </div>
@@ -308,7 +308,7 @@ export default function Home() {
               </svg>
             </button>
 
-            {/* AI 그린렌즈 (중앙, 크게) */}
+            {/* AI 그린렌즈 */}
             <button
               onClick={() => {
                 if (mainTab === 'camera') {
@@ -323,14 +323,11 @@ export default function Home() {
                   setMainTab('camera');
                 }
               }}
-              className={`w-14 h-14 rounded-full flex items-center justify-center -mt-6 shadow-xl ${
-                mainTab === 'camera' ? 'bg-emerald-600' : 'bg-gray-900'
-              }`}
+              className={`flex flex-col items-center gap-1 ${mainTab === 'camera' ? 'text-emerald-600' : 'text-gray-400'}`}
             >
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="7" width="16" height="12" rx="2" stroke="#84FF00" strokeWidth="2" fill="none"/>
-                <circle cx="12" cy="13" r="3" stroke="#84FF00" strokeWidth="2" fill="none"/>
-                <circle cx="12" cy="13" r="1.2" fill="#84FF00"/>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="6" width="18" height="13" rx="2" stroke="currentColor" strokeWidth="2"/>
+                <circle cx="12" cy="12.5" r="3" stroke="currentColor" strokeWidth="2"/>
               </svg>
             </button>
 

@@ -88,3 +88,115 @@ export function getCoachMessage(period: PeriodType): string {
 
   return `${periodLabel[period]}에는 ${catLabel[top[0]]}에서 가장 많이 감축했어요!`;
 }
+
+export interface ChartDataPoint {
+  label: string;
+  value: number;
+}
+
+export function getChartData(period: PeriodType): ChartDataPoint[] {
+  if (period === "Day") {
+    // Get today's log and distribute across time-of-day buckets
+    const logs = getLogsForPeriod("Day");
+    if (logs.length === 0) {
+      return [];
+    }
+    
+    const todayLog = logs[0];
+    const dailyTotal = Object.values(todayLog.values).reduce((s, v) => s + v, 0);
+    
+    // Define 6 time slots
+    const timeSlots = ["0시", "4시", "8시", "12시", "16시", "20시"];
+    
+    // Use weighted distribution that sums to 1.0
+    const weights = [0.1, 0.15, 0.25, 0.25, 0.15, 0.1];
+    
+    return timeSlots.map((label, i) => ({
+      label,
+      value: Math.round(dailyTotal * weights[i] * 10) / 10
+    }));
+  }
+
+  if (period === "Week") {
+    // Get last 7 days, one point per day
+    const logs = getLogsForPeriod("Week");
+    const today = new Date();
+    const points: ChartDataPoint[] = [];
+    
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const label = `${d.getMonth() + 1}/${d.getDate()}`;
+      
+      const dayLog = logs.find(l => l.date === dateStr);
+      const dailyTotal = dayLog 
+        ? Object.values(dayLog.values).reduce((s, v) => s + v, 0)
+        : 0;
+      
+      points.push({ 
+        label, 
+        value: Math.round(dailyTotal * 10) / 10 
+      });
+    }
+    
+    return points;
+  }
+
+  if (period === "Month") {
+    // Get last 30 days, one point per day
+    const logs = getLogsForPeriod("Month");
+    const today = new Date();
+    const points: ChartDataPoint[] = [];
+    
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const label = `${d.getMonth() + 1}/${d.getDate()}`;
+      
+      const dayLog = logs.find(l => l.date === dateStr);
+      const dailyTotal = dayLog 
+        ? Object.values(dayLog.values).reduce((s, v) => s + v, 0)
+        : 0;
+      
+      points.push({ 
+        label, 
+        value: Math.round(dailyTotal * 10) / 10 
+      });
+    }
+    
+    return points;
+  }
+
+  if (period === "Year") {
+    // Aggregate by month for last 12 months
+    const logs = getLogsForPeriod("Year");
+    const monthlyTotals: Record<string, number> = {};
+    
+    logs.forEach(log => {
+      const monthKey = log.date.substring(0, 7); // YYYY-MM
+      const dailyTotal = Object.values(log.values).reduce((s, v) => s + v, 0);
+      monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + dailyTotal;
+    });
+    
+    const today = new Date();
+    const points: ChartDataPoint[] = [];
+    
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = `${d.getMonth() + 1}월`;
+      
+      const value = monthlyTotals[monthKey] || 0;
+      points.push({ 
+        label, 
+        value: Math.round(value * 10) / 10 
+      });
+    }
+    
+    return points;
+  }
+
+  return [];
+}

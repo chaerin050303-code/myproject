@@ -9,25 +9,35 @@ interface UserStats {
   totalRecycleActions: number;
 }
 
-const STORAGE_KEY = "greenai_user_stats";
+const NICKNAME_KEY = "greenai_current_nickname";
 
-const getInitialStats = (): UserStats => {
-  if (typeof window === "undefined") {
+const getStatsKey = (nickname: string) => `greenai_user_stats_${nickname}`;
+
+const getInitialNickname = (): string => {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(NICKNAME_KEY) || "";
+};
+
+const getStatsForNickname = (nickname: string): Omit<UserStats, "nickname"> => {
+  if (typeof window === "undefined" || !nickname) {
     return {
-      nickname: "",
       totalCarbonSaved: 0,
       totalEcoPurchases: 0,
       totalRecycleActions: 0,
     };
   }
 
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = localStorage.getItem(getStatsKey(nickname));
   if (stored) {
     try {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      return {
+        totalCarbonSaved: parsed.totalCarbonSaved || 0,
+        totalEcoPurchases: parsed.totalEcoPurchases || 0,
+        totalRecycleActions: parsed.totalRecycleActions || 0,
+      };
     } catch {
       return {
-        nickname: "",
         totalCarbonSaved: 0,
         totalEcoPurchases: 0,
         totalRecycleActions: 0,
@@ -36,7 +46,6 @@ const getInitialStats = (): UserStats => {
   }
 
   return {
-    nickname: "",
     totalCarbonSaved: 0,
     totalEcoPurchases: 0,
     totalRecycleActions: 0,
@@ -44,17 +53,42 @@ const getInitialStats = (): UserStats => {
 };
 
 export function useUserStats() {
-  const [stats, setStats] = useState<UserStats>(getInitialStats);
+  const [currentNickname, setCurrentNickname] = useState<string>(getInitialNickname);
+  const [stats, setStats] = useState<UserStats>(() => {
+    const nickname = getInitialNickname();
+    return {
+      nickname,
+      ...getStatsForNickname(nickname),
+    };
+  });
 
-  // Sync to localStorage whenever stats change
+  // Sync current nickname to localStorage
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
+    if (typeof window !== "undefined" && currentNickname) {
+      localStorage.setItem(NICKNAME_KEY, currentNickname);
+    }
+  }, [currentNickname]);
+
+  // Sync stats to localStorage for current nickname
+  useEffect(() => {
+    if (typeof window !== "undefined" && stats.nickname) {
+      const statsToSave = {
+        totalCarbonSaved: stats.totalCarbonSaved,
+        totalEcoPurchases: stats.totalEcoPurchases,
+        totalRecycleActions: stats.totalRecycleActions,
+      };
+      localStorage.setItem(getStatsKey(stats.nickname), JSON.stringify(statsToSave));
     }
   }, [stats]);
 
   const setNickname = (nickname: string) => {
-    setStats((prev) => ({ ...prev, nickname }));
+    setCurrentNickname(nickname);
+    // Load stats for this nickname
+    const nicknameStats = getStatsForNickname(nickname);
+    setStats({
+      nickname,
+      ...nicknameStats,
+    });
   };
 
   const addCarbonSaved = (amount: number) => {
